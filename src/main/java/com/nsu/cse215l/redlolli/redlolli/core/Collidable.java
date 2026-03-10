@@ -1,4 +1,8 @@
 package com.nsu.cse215l.redlolli.redlolli.core;
 
-public class Collidable {
+import javafx.geometry.Rectangle2D;
+
+public interface Collidable {
+    // Returns the bounding box for collision detection
+    Rectangle2D getHitbox();
 }

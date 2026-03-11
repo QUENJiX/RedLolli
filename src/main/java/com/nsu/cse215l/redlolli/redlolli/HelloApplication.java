@@ -24,7 +24,6 @@ import javafx.stage.Stage;
 import java.util.ArrayList;
 import java.util.HashSet;
 import java.util.List;
-import java.util.Random;
 import java.util.Set;
 
 // Game package imports
@@ -228,31 +227,25 @@ public class HelloApplication extends Application {
         mainWindow.setScene(gameScene);
     }
 
-    /** Spawns Pale Luna and chests from the map grid, randomly assigning the lolli. */
+    /** Spawns Pale Luna and chests from the map grid. Tile 2 = empty chest, tile 3 = lolli chest. */
     private void spawnEntities() {
         int[][] grid = maze.getMapGrid();
-        List<int[]> chestPositions = new ArrayList<>();
 
         for (int row = 0; row < grid.length; row++) {
             for (int col = 0; col < grid[row].length; col++) {
-                if (grid[row][col] == 2 || grid[row][col] == 3) {
-                    chestPositions.add(new int[]{row, col});
+                int tile = grid[row][col];
+                if (tile == 2 || tile == 3) {
+                    boolean hasLolli = (tile == 3);
+                    Item chest = new Item(col * Maze.TILE_SIZE + 12, row * Maze.TILE_SIZE + Maze.Y_OFFSET + 12, hasLolli);
+                    chests.add(chest);
+                    entities.add(chest);
                     grid[row][col] = 0;
-                } else if (grid[row][col] == 5) {
+                } else if (tile == 5) {
                     paleLuna = new Monster(col * Maze.TILE_SIZE + 7.5, row * Maze.TILE_SIZE + Maze.Y_OFFSET + 7.5);
                     entities.add(paleLuna);
                     grid[row][col] = 0;
                 }
             }
-        }
-
-        // Randomly pick one chest to hold the Red Lolli
-        int lolliIndex = new Random().nextInt(chestPositions.size());
-        for (int i = 0; i < chestPositions.size(); i++) {
-            int[] pos = chestPositions.get(i);
-            Item chest = new Item(pos[1] * Maze.TILE_SIZE + 12, pos[0] * Maze.TILE_SIZE + Maze.Y_OFFSET + 12, i == lolliIndex);
-            chests.add(chest);
-            entities.add(chest);
         }
     }
 

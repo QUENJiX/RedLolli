@@ -21,9 +21,8 @@ import java.util.ArrayList;
 import java.util.List;
 import com.nsu.cse215l.redlolli.redlolli.entities.Entity;
 import com.nsu.cse215l.redlolli.redlolli.entities.Item;
-import com.nsu.cse215l.redlolli.redlolli.map.Maze;
-import javafx.scene.shape.FillRule;
 import com.nsu.cse215l.redlolli.redlolli.entities.Monster;
+import javafx.scene.shape.FillRule;
 
 import java.util.HashSet;
 import java.util.Set;
@@ -32,25 +31,39 @@ public class HelloApplication extends Application {
     private Stage mainWindow;
     private AnimationTimer gameLoop;
     private boolean isPlaying = false;
-    private long survivalFrames = 0; // Tracks time for the Game Over screen
 
     private final Set<KeyCode> activeKeys = new HashSet<>();
     private Player player;
     private Maze maze;
+    private Monster paleLuna;
 
     private List<Entity> entities = new ArrayList<>();
-    private List<Item> lollis = new ArrayList<>();
-    private List<Monster> monsters = new ArrayList<>();
+    private List<Item> chests = new ArrayList<>();
+
+    // Level progression
+    private int currentLevel = 1;
+    private final String[] MAP_FILES = {"/map.csv", "/map2.csv", "/map3.csv"};
+    private final String[] ITEM_NAMES = {"Mud", "Shovel", "Rope"};
+    private final int[] CHESTS_PER_LEVEL = {3, 4, 5};
+
+    // Screen text for item found — only the main text, button text is separate
+    private final String[] ITEM_FOUND_MAIN_TEXT = {"Mud Found", "Shovel Found", "Rope Found"};
+    private final String[] ITEM_FOUND_BUTTON_TEXT = {"here.", "use", "now"};
+
+    // Item found overlay — now uses a JavaFX scene overlay with button
+    private boolean showingItemFound = false;
+    private boolean levelFoundLolli = false;
+
+    // Warning flash when Pale Luna activates
+    private int warningFlashTimer = 0;
+    private double pulsePhaseHUD = 0;
 
     @Override
     public void start(Stage stage) {
         this.mainWindow = stage;
-
-        // Boot directly into the Main Menu
         Scene menuScene = createMainMenu();
-
         mainWindow.setScene(menuScene);
-        mainWindow.setTitle("Red Lolli");
+        mainWindow.setTitle("Escape Pale Luna");
         mainWindow.show();
     }
 
@@ -59,66 +72,70 @@ public class HelloApplication extends Application {
         layout.setAlignment(Pos.CENTER);
         layout.setStyle("-fx-background-color: black;");
 
-        Text title = new Text("RED LOLLI");
-        title.setFont(Font.font("Arial", FontWeight.BOLD, 60));
+        Text title = new Text("ESCAPE PALE LUNA");
+        title.setFont(Font.font("Arial", FontWeight.BOLD, 50));
         title.setFill(Color.DARKRED);
 
+        Text subtitle = new Text("Find the red lollies. Survive the demon.");
+        subtitle.setFont(Font.font("Arial", 18));
+        subtitle.setFill(Color.GRAY);
+
         Button newGameBtn = createStyledButton("> NEW GAME");
-        Button loadGameBtn = createStyledButton("LOAD GAME");
-        Button highScoresBtn = createStyledButton("HIGH SCORES");
         Button exitBtn = createStyledButton("EXIT");
 
-        // Wire up the buttons
-        newGameBtn.setOnAction(e -> startNewGame());
+        newGameBtn.setOnAction(e -> startGame(1));
         exitBtn.setOnAction(e -> System.exit(0));
 
-        layout.getChildren().addAll(title, newGameBtn, loadGameBtn, highScoresBtn, exitBtn);
-        return new Scene(layout, 800, 600);
+        layout.getChildren().addAll(title, subtitle, newGameBtn, exitBtn);
+        return new Scene(layout, 880, 730);
     }
 
-    // Helper method to keep your minimalist, dark aesthetic [cite: 68]
     private Button createStyledButton(String text) {
         Button btn = new Button(text);
         btn.setFont(Font.font("Arial", FontWeight.BOLD, 20));
         btn.setStyle("-fx-background-color: #1a1a1a; -fx-text-fill: white; -fx-border-color: darkred; -fx-border-width: 1px; -fx-padding: 10 40;");
 
-        // Simple hover effect
         btn.setOnMouseEntered(e -> btn.setStyle("-fx-background-color: #330000; -fx-text-fill: white; -fx-border-color: red; -fx-border-width: 1px; -fx-padding: 10 40;"));
         btn.setOnMouseExited(e -> btn.setStyle("-fx-background-color: #1a1a1a; -fx-text-fill: white; -fx-border-color: darkred; -fx-border-width: 1px; -fx-padding: 10 40;"));
         return btn;
     }
 
-    private void startNewGame() {
-        // 1. Reset everything for a fresh run
+    private void startGame(int level) {
+        currentLevel = level;
         entities.clear();
-        lollis.clear();
-        monsters.clear();
+        chests.clear();
         activeKeys.clear();
-        survivalFrames = 0;
+        paleLuna = null;
         isPlaying = true;
+        showingItemFound = false;
+        levelFoundLolli = false;
+        warningFlashTimer = 0;
+        pulsePhaseHUD = 0;
 
-        // 2. Initialize the game objects
-        maze = new Maze("/map.csv");
-        player = new Player(60, 60);
+        // Load the correct map for this level
+        maze = new Maze(MAP_FILES[currentLevel - 1]);
+
+        // Spawn player at designated position
+        double spawnX = maze.getPlayerSpawnCol() * Maze.TILE_SIZE + 10;
+        double spawnY = maze.getPlayerSpawnRow() * Maze.TILE_SIZE + Maze.Y_OFFSET + 10;
+        player = new Player(spawnX, spawnY);
         entities.add(player);
+
         spawnEntities();
 
-        // 3. Setup the Canvas and Scene
-        Canvas canvas = new Canvas(800, 600);
+        Canvas canvas = new Canvas(880, 730);
         GraphicsContext gc = canvas.getGraphicsContext2D();
-        Scene gameScene = new Scene(new Group(canvas), 800, 600, Color.BLACK);
+        Scene gameScene = new Scene(new Group(canvas), 880, 730, Color.BLACK);
 
         gameScene.setOnKeyPressed(e -> activeKeys.add(e.getCode()));
         gameScene.setOnKeyReleased(e -> activeKeys.remove(e.getCode()));
 
-        // 4. Start the game loop
         if (gameLoop != null) gameLoop.stop();
 
         gameLoop = new AnimationTimer() {
             @Override
             public void handle(long now) {
                 if (isPlaying) {
-                    survivalFrames++; // Count frames for the survival timer
                     update();
                     render(gc);
                 }
@@ -126,7 +143,6 @@ public class HelloApplication extends Application {
         };
         gameLoop.start();
 
-        // 5. Swap the window to the active game
         mainWindow.setScene(gameScene);
     }
 
@@ -136,21 +152,20 @@ public class HelloApplication extends Application {
             for (int col = 0; col < grid[row].length; col++) {
 
                 if (grid[row][col] == 2) {
-                    Item lolli = new Item(col * Maze.TILE_SIZE + 12, row * Maze.TILE_SIZE + 12);
-                    lollis.add(lolli);
-                    entities.add(lolli); // Allows polymorphic render() [cite: 28]
+                    // Empty chest
+                    Item chest = new Item(col * Maze.TILE_SIZE + 12, row * Maze.TILE_SIZE + Maze.Y_OFFSET + 12, false);
+                    chests.add(chest);
+                    entities.add(chest);
                     grid[row][col] = 0;
-                }
-
-                else if (grid[row][col] == 4) {
-                    Monster stalker = new Monster(col * Maze.TILE_SIZE + 7.5, row * Maze.TILE_SIZE + 7.5);
-
-                    // We add it to 'monsters' so the update() loop can run its AI math
-                    monsters.add(stalker);
-
-                    // We add it to 'entities' so the render() loop draws its body [cite: 28, 33]
-                    entities.add(stalker);
-
+                } else if (grid[row][col] == 3) {
+                    // Chest with the red lolli
+                    Item chest = new Item(col * Maze.TILE_SIZE + 12, row * Maze.TILE_SIZE + Maze.Y_OFFSET + 12, true);
+                    chests.add(chest);
+                    entities.add(chest);
+                    grid[row][col] = 0;
+                } else if (grid[row][col] == 5) {
+                    paleLuna = new Monster(col * Maze.TILE_SIZE + 7.5, row * Maze.TILE_SIZE + Maze.Y_OFFSET + 7.5);
+                    entities.add(paleLuna);
                     grid[row][col] = 0;
                 }
             }
@@ -158,171 +173,377 @@ public class HelloApplication extends Application {
     }
 
     private void drawFogOfWar(GraphicsContext gc) {
-        // Find the center of the player
         double playerCX = player.getX() + (player.getSize() / 2);
         double playerCY = player.getY() + (player.getSize() / 2);
 
-        // Calculate the dynamically shrinking radius [cite: 17]
-        // Max radius = 180px, Min radius = 40px (when Sanity is 0)
-        double visionRadius = 40 + (player.getSanity() / 100.0) * 140;
+        double visionRadius = 150;
 
-        gc.save(); // Save the current graphics state
-
+        gc.save();
         gc.beginPath();
-
-        // 1. Draw the outer bounds (covering the whole 800x600 screen)
-        gc.rect(0, 0, 800, 600);
-
-        // 2. Draw the inner cutout circle around the player
-        // arc(centerX, centerY, radiusX, radiusY, startAngle, arcExtent)
+        gc.rect(0, 0, 880, 730);
         gc.arc(playerCX, playerCY, visionRadius, visionRadius, 0, 360);
-
-        // 3. Apply the Even-Odd rule to cut the hole, and fill the rest with black
         gc.setFillRule(FillRule.EVEN_ODD);
         gc.setFill(Color.BLACK);
         gc.fill();
-
-        gc.restore(); // Restore state so we don't accidentally apply Even-Odd to other things
+        gc.restore();
     }
 
     private void drawHUD(GraphicsContext gc) {
-        // 1. HUD Background & Border
-        gc.setFill(Color.rgb(25, 30, 35)); // Dark slate background
-        gc.fillRect(0, 0, 800, 50); // Covers the top 50 pixels
+        gc.setFill(Color.rgb(15, 15, 20));
+        gc.fillRect(0, 0, 880, 50);
 
-        gc.setStroke(Color.WHITE);
-        gc.setLineWidth(1);
-        gc.strokeLine(0, 50, 800, 50); // White separator line
+        gc.setStroke(Color.DARKRED);
+        gc.setLineWidth(2);
+        gc.strokeLine(0, 50, 880, 50);
 
-        // 2. Setup Font
-        gc.setFill(Color.WHITE);
-        gc.setFont(javafx.scene.text.Font.font("Arial", javafx.scene.text.FontWeight.BOLD, 18));
+        gc.setFont(Font.font("Arial", FontWeight.BOLD, 15));
 
-        // 3. Sanity Bar
-        gc.fillText("SANITY:", 20, 32);
+        // Level indicator
+        gc.setFill(Color.rgb(180, 180, 200));
+        gc.fillText("LEVEL " + currentLevel + "/3", 15, 20);
 
-        gc.setStroke(Color.GRAY);
-        gc.strokeRect(100, 15, 150, 20); // Bar outline
+        // Red Lolli tracker (0/1 or 1/1)
+        boolean foundLolli = chests.stream().anyMatch(c -> c.isCollected() && c.hasLolli());
+        // Draw small lolli icon
+        gc.setFill(Color.DARKRED);
+        gc.fillOval(15, 28, 8, 8);
+        gc.setStroke(Color.rgb(180, 150, 100));
+        gc.setLineWidth(1.5);
+        gc.strokeLine(19, 36, 19, 42);
 
-        double currentSanity = player.getSanity();
-        if (currentSanity > 40) {
-            gc.setFill(Color.LIMEGREEN); // Calm State
+        gc.setFont(Font.font("Arial", FontWeight.BOLD, 14));
+        if (foundLolli) {
+            gc.setFill(Color.LIMEGREEN);
+            gc.fillText("RED LOLLI: 1/1", 28, 40);
         } else {
-            gc.setFill(Color.DARKRED);   // Panic State
+            gc.setFill(Color.rgb(200, 200, 200));
+            gc.fillText("RED LOLLI: 0/1", 28, 40);
         }
-        // Fill the bar proportionally based on sanity (out of 100)
-        gc.fillRect(101, 16, (currentSanity / 100.0) * 148, 18);
 
-        // 4. Lollis Counter
-        long collected = lollis.stream().filter(Item::isCollected).count();
-        gc.setFill(Color.WHITE);
-        gc.fillText("LOLLIS: [" + collected + "/3]", 300, 32);
+        // Item needed
+        gc.setFill(Color.GOLD);
+        gc.setFont(Font.font("Arial", FontWeight.BOLD, 14));
+        gc.fillText("FIND: " + ITEM_NAMES[currentLevel - 1], 180, 20);
 
-        // 5. Dynamic Status Text
-        if (currentSanity > 40) {
-            gc.setFill(Color.LIGHTGRAY);
-            gc.fillText("STATUS: CALM", 550, 32);
-        } else {
-            gc.setFill(Color.DARKRED);
-            gc.fillText("STATUS: CRITICAL", 550, 32);
+        // Chests opened
+        long opened = chests.stream().filter(Item::isCollected).count();
+        gc.setFill(Color.rgb(180, 160, 120));
+        gc.fillText("CHESTS: " + opened + "/" + chests.size(), 180, 40);
+
+        // --- Pale Luna timer with dynamic colors ---
+        if (paleLuna != null) {
+            Monster.State lunaState = paleLuna.getState();
+            gc.setFont(Font.font("Arial", FontWeight.BOLD, 14));
+
+            switch (lunaState) {
+                case IDLE:
+                    int secondsLeft = paleLuna.getIdleTimer() / 60;
+                    // Dynamic color: green > yellow > orange > red as timer decreases
+                    Color timerColor;
+                    if (secondsLeft > 10) {
+                        timerColor = Color.LIMEGREEN;
+                    } else if (secondsLeft > 6) {
+                        timerColor = Color.YELLOW;
+                    } else if (secondsLeft > 3) {
+                        timerColor = Color.ORANGE;
+                    } else {
+                        // Flashing red in last 3 seconds
+                        double flash = Math.sin(pulsePhaseHUD) * 0.5 + 0.5;
+                        timerColor = Color.rgb(255, (int)(50 * flash), (int)(50 * flash));
+                    }
+                    pulsePhaseHUD += 0.2;
+
+                    // Timer bar background
+                    gc.setFill(Color.rgb(40, 40, 45));
+                    gc.fillRect(400, 10, 200, 14);
+                    gc.setStroke(Color.rgb(80, 80, 90));
+                    gc.setLineWidth(1);
+                    gc.strokeRect(400, 10, 200, 14);
+
+                    // Timer bar fill
+                    double fillRatio = (double) paleLuna.getIdleTimer() / 900.0;
+                    gc.setFill(timerColor);
+                    gc.fillRect(401, 11, 198 * fillRatio, 12);
+
+                    gc.setFill(timerColor);
+                    gc.fillText("PALE LUNA WAKES IN: " + secondsLeft + "s", 400, 40);
+                    break;
+                case CHASING:
+                    // Chasing: flashing red bar
+                    double chaseFlash = Math.sin(pulsePhaseHUD * 2) * 0.5 + 0.5;
+                    pulsePhaseHUD += 0.3;
+                    gc.setFill(Color.rgb(255, (int)(30 * chaseFlash), (int)(30 * chaseFlash)));
+                    gc.fillRect(400, 10, 200, 14);
+                    int chaseSecsLeft = paleLuna.getChaseTimer() / 60;
+                    double chaseFill = (double) paleLuna.getChaseTimer() / 300.0;
+                    gc.setFill(Color.rgb(200, 0, 0));
+                    gc.fillRect(401, 11, 198 * chaseFill, 12);
+
+                    gc.setFill(Color.RED);
+                    gc.setFont(Font.font("Arial", FontWeight.BOLD, 15));
+                    gc.fillText("!! HUNTING: " + chaseSecsLeft + "s !!", 420, 40);
+                    break;
+                case WAITING_AT_DOOR:
+                    gc.setFill(Color.ORANGE);
+                    gc.fillText("PALE LUNA: watching the door...", 400, 25);
+                    int waitSecs = paleLuna.getWaitTimer() / 60;
+                    gc.setFill(Color.rgb(255, 165, 0));
+                    gc.fillText("DO NOT LEAVE! (" + waitSecs + "s)", 400, 40);
+                    break;
+            }
+        }
+
+        // Escape room icon on far right
+        if (player.isInEscapeRoom()) {
+            gc.setFill(Color.LIMEGREEN);
+            gc.setFont(Font.font("Arial", FontWeight.BOLD, 13));
+            gc.fillText("[SAFE]", 820, 32);
         }
     }
 
+    private void showItemFoundScreen() {
+        isPlaying = false;
+        if (gameLoop != null) gameLoop.stop();
+        showingItemFound = true;
+
+        VBox layout = new VBox(25);
+        layout.setAlignment(Pos.CENTER);
+        layout.setStyle("-fx-background-color: black;");
+
+        // Creepy flickering title
+        Text paleLunaText = new Text("pale luna smiles wide...");
+        paleLunaText.setFont(Font.font("Serif", FontWeight.BOLD, 28));
+        paleLunaText.setFill(Color.rgb(120, 0, 0));
+
+        // The item name in huge creepy style
+        String itemName = ITEM_FOUND_MAIN_TEXT[currentLevel - 1];
+        Text mainText = new Text(itemName);
+        mainText.setFont(Font.font("Serif", FontWeight.BOLD, 65));
+        mainText.setFill(Color.DARKRED);
+
+        // Creepy subtext
+        Text subText = new Text("the red lolli transforms...");
+        subText.setFont(Font.font("Serif", 20));
+        subText.setFill(Color.rgb(100, 100, 100));
+
+        // Item description
+        String[] itemDescriptions = {
+                "Cold, wet earth clings to your fingers.",
+                "Rusted metal. It still cuts deep.",
+                "Fraying strands. Strong enough to bind."
+        };
+        Text descText = new Text(itemDescriptions[currentLevel - 1]);
+        descText.setFont(Font.font("Serif", 18));
+        descText.setFill(Color.rgb(150, 140, 130));
+
+        Text spacer = new Text("");
+
+        // The button with the level's keyword
+        String btnLabel = ITEM_FOUND_BUTTON_TEXT[currentLevel - 1];
+        Button continueBtn = new Button(btnLabel);
+        continueBtn.setFont(Font.font("Serif", FontWeight.BOLD, 28));
+        continueBtn.setStyle("-fx-background-color: #1a0000; -fx-text-fill: #cc0000; -fx-border-color: #660000; -fx-border-width: 2px; -fx-padding: 12 50; -fx-cursor: hand;");
+        continueBtn.setOnMouseEntered(e -> continueBtn.setStyle("-fx-background-color: #330000; -fx-text-fill: #ff3333; -fx-border-color: #990000; -fx-border-width: 2px; -fx-padding: 12 50; -fx-cursor: hand;"));
+        continueBtn.setOnMouseExited(e -> continueBtn.setStyle("-fx-background-color: #1a0000; -fx-text-fill: #cc0000; -fx-border-color: #660000; -fx-border-width: 2px; -fx-padding: 12 50; -fx-cursor: hand;"));
+
+        continueBtn.setOnAction(e -> {
+            showingItemFound = false;
+            advanceLevel();
+        });
+
+        layout.getChildren().addAll(paleLunaText, mainText, subText, descText, spacer, continueBtn);
+        mainWindow.setScene(new Scene(layout, 880, 730));
+    }
+
     private void update() {
+        if (showingItemFound) return;
+
         player.update();
-        //1. Calculate how many lollis we have collected
-        int collectedCount = (int) lollis.stream().filter(Item::isCollected).count();
-        boolean isHidden = maze.isHidingSpot(player.getHitbox());
-        boolean anyMonsterChasing = false;
 
         if (activeKeys.contains(KeyCode.W)) player.move(0, -1, maze);
         if (activeKeys.contains(KeyCode.S)) player.move(0, 1, maze);
         if (activeKeys.contains(KeyCode.A)) player.move(-1, 0, maze);
         if (activeKeys.contains(KeyCode.D)) player.move(1, 0, maze);
 
-        // Check for collisions between player and uncollected lollis
-        for (Item lolli : lollis) {
-            if (!lolli.isCollected() && player.getHitbox().intersects(lolli.getHitbox())) {
-                lolli.collect();
+        // Check if player is in escape room
+        boolean inEscapeRoom = maze.isEscapeRoom(player.getHitbox());
+        player.setInEscapeRoom(inEscapeRoom);
 
-                // Drop sanity by 30 points per Lolli collected
-                player.dropSanity(30.0);
-                System.out.println("Cursed Sugar! Vision shrinking. Sanity: " + player.getSanity());
+        // Check chest collisions
+        for (Item chest : chests) {
+            if (!chest.isCollected() && player.getHitbox().intersects(chest.getHitbox())) {
+                chest.collect();
+
+                if (chest.hasLolli()) {
+                    // Found the red lolli! Show the inter-level screen
+                    levelFoundLolli = true;
+                    showItemFoundScreen();
+                    return;
+                }
             }
         }
 
+        // Update Pale Luna AI
+        if (paleLuna != null) {
+            Monster.State prevState = paleLuna.getState();
+            paleLuna.update(player.getX(), player.getY(), inEscapeRoom, maze);
 
-        //2. Pass the count to the monsters
-        for (Monster m : monsters) {
-            m.update(player.getX(), player.getY(), isHidden, collectedCount, maze);
-
-            // Check if THIS specific monster is actively chasing the player
-            if (m.isChasing()) {
-                anyMonsterChasing = true;
+            // Flash warning when chase begins
+            if (prevState == Monster.State.IDLE && paleLuna.getState() == Monster.State.CHASING) {
+                warningFlashTimer = 30; // Half-second red flash
             }
 
-            if (!isHidden && player.getHitbox().intersects(m.getHitbox())) {
-                // Remove the System.out.println and call the new method
-                triggerGameOver();
+            if (warningFlashTimer > 0) warningFlashTimer--;
+
+            player.setBeingChased(paleLuna.isChasing());
+
+            // Death check: Pale Luna touches player while not in escape room
+            if (!inEscapeRoom && paleLuna.isChasing() && player.getHitbox().intersects(paleLuna.getHitbox())) {
+                triggerDeath();
+                return;
+            }
+
+            // Death check: player steps out of escape room while Pale Luna is waiting outside
+            if (!inEscapeRoom && paleLuna.isWaitingAtDoor()) {
+                // Check if Pale Luna can see the player (line of sight = death)
+                boolean canSee = maze.hasLineOfSight(
+                        paleLuna.getX() + 12, paleLuna.getY() + 12,
+                        player.getX() + 10, player.getY() + 10);
+                if (canSee) {
+                    triggerDeath();
+                    return;
+                }
             }
         }
-        // Pass the final result to the player so they can update their expression!
-        player.setBeingChased(anyMonsterChasing);
     }
 
-    private void triggerGameOver() {
+    private void advanceLevel() {
+        if (currentLevel >= 3) {
+            // All 3 levels complete — victory!
+            triggerVictory();
+        } else {
+            startGame(currentLevel + 1);
+        }
+    }
+
+    private void triggerDeath() {
         isPlaying = false;
-        gameLoop.stop();
+        if (gameLoop != null) gameLoop.stop();
 
-        // Calculate stats
-        int collectedCount = (int) lollis.stream().filter(Item::isCollected).count();
-        int secondsSurvived = (int) (survivalFrames / 60); // Assuming 60 FPS
-        String timeString = String.format("%02d:%02d", secondsSurvived / 60, secondsSurvived % 60);
-
-        // Build the Game Over layout
         VBox layout = new VBox(20);
         layout.setAlignment(Pos.CENTER);
         layout.setStyle("-fx-background-color: black;");
 
+        String[] deathLines = {
+                "pale luna smiles wide",
+                "there is no escape",
+                "pale luna smiles wide",
+                "no more lollies to take",
+                "pale luna smiles wide",
+                "now you are dead"
+        };
+
         Text title = new Text("YOU DIED");
-        title.setFont(Font.font("Arial", FontWeight.BOLD, 80));
+        title.setFont(Font.font("Arial", FontWeight.BOLD, 70));
         title.setFill(Color.DARKRED);
+        layout.getChildren().add(title);
 
-        Text loreSubtitle = new Text("The sugar rush ended. The shadows consumed you.");
-        loreSubtitle.setFont(Font.font("Arial", 20));
-        loreSubtitle.setFill(Color.LIGHTGRAY);
+        for (String line : deathLines) {
+            Text t = new Text(line);
+            t.setFont(Font.font("Arial", 20));
+            t.setFill(Color.LIGHTGRAY);
+            layout.getChildren().add(t);
+        }
 
-        Text stats = new Text("Lollis Collected: " + collectedCount + "/3   |   Time Survived: " + timeString);
-        stats.setFont(Font.font("Arial", FontWeight.BOLD, 24));
-        stats.setFill(Color.WHITE);
+        Text spacer = new Text("");
+        layout.getChildren().add(spacer);
 
-        Button restartBtn = createStyledButton("RESTART CURRENT MAZE");
-        restartBtn.setOnAction(e -> startNewGame());
+        Button restartBtn = createStyledButton("RESTART FROM LEVEL 1");
+        restartBtn.setOnAction(e -> startGame(1));
 
-        layout.getChildren().addAll(title, loreSubtitle, stats, new Text(""), restartBtn);
+        Button menuBtn = createStyledButton("MAIN MENU");
+        menuBtn.setOnAction(e -> mainWindow.setScene(createMainMenu()));
 
-        // Swap the window to the death screen
-        mainWindow.setScene(new Scene(layout, 800, 600));
+        layout.getChildren().addAll(restartBtn, menuBtn);
+        mainWindow.setScene(new Scene(layout, 880, 730));
+    }
+
+    private void triggerVictory() {
+        isPlaying = false;
+        if (gameLoop != null) gameLoop.stop();
+
+        VBox layout = new VBox(16);
+        layout.setAlignment(Pos.CENTER);
+        layout.setStyle("-fx-background-color: black;");
+
+        String[] victoryLines = {
+                "pale luna smiles wide",
+                "the ground is soft",
+                "pale luna smiles wide",
+                "there is a hole",
+                "pale luna smiles wide",
+                "tie her up with rope",
+                "",
+                "congratulations! you have escaped from pale luna"
+        };
+
+        Text title = new Text("YOU ESCAPED");
+        title.setFont(Font.font("Arial", FontWeight.BOLD, 60));
+        title.setFill(Color.LIMEGREEN);
+        layout.getChildren().add(title);
+
+        for (String line : victoryLines) {
+            Text t = new Text(line);
+            if (line.startsWith("congratulations")) {
+                t.setFont(Font.font("Arial", FontWeight.BOLD, 22));
+                t.setFill(Color.GOLD);
+            } else {
+                t.setFont(Font.font("Arial", 20));
+                t.setFill(Color.LIGHTGRAY);
+            }
+            layout.getChildren().add(t);
+        }
+
+        Text spacer = new Text("");
+        layout.getChildren().add(spacer);
+
+        Button menuBtn = createStyledButton("MAIN MENU");
+        menuBtn.setOnAction(e -> mainWindow.setScene(createMainMenu()));
+        layout.getChildren().add(menuBtn);
+
+        mainWindow.setScene(new Scene(layout, 880, 730));
     }
 
     private void render(GraphicsContext gc) {
         gc.setFill(Color.BLACK);
-        gc.fillRect(0, 0, 800, 600);
+        gc.fillRect(0, 0, 880, 730);
 
         maze.renderMaze(gc);
 
         for (Entity e : entities) {
-            e.render(gc); // Draws Player, Items, and the Monster's BODY
+            e.render(gc);
         }
 
-        //drawFogOfWar(gc); // Draws the pitch black mask
+        //drawFogOfWar(gc);
 
-        // Requirement 3: Draw the glowing eyes ON TOP of the darkness
-        for (Monster m : monsters) {
-            m.renderEyes(gc);
+        // Draw Pale Luna's eyes on top of darkness
+        if (paleLuna != null) {
+            paleLuna.renderEyes(gc);
         }
 
-        drawHUD(gc); // HUD goes on the very top layer
+        // Warning flash when chase starts
+        if (warningFlashTimer > 0) {
+            gc.setFill(Color.rgb(255, 0, 0, 0.15));
+            gc.fillRect(0, 0, 880, 730);
+        }
+
+        drawHUD(gc);
+
+        // Escape room indicator — subtle green bar below HUD
+        if (player.isInEscapeRoom()) {
+            gc.setFill(Color.rgb(0, 80, 0, 0.25));
+            gc.fillRect(0, 50, 880, 4);
+        }
     }
 
     public static void main(String[] args) {

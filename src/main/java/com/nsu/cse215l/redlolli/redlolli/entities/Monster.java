@@ -5,96 +5,114 @@ import com.nsu.cse215l.redlolli.redlolli.core.Collidable;
 import javafx.geometry.Rectangle2D;
 import javafx.scene.canvas.GraphicsContext;
 import javafx.scene.paint.Color;
+import javafx.scene.shape.ArcType;
 
 public class Monster extends Entity implements Collidable {
-    private double speed = 1.2; // Slowed down slightly to give the player a fighting chance
+    private double speed = 2.0;
     private double pulsePhase = 0.0;
-    private int currentLollis = 0;
 
-    // AI State Variables
-    private boolean isChasing = false;
+    // AI state machine
+    public enum State { IDLE, CHASING, WAITING_AT_DOOR }
+    private State state = State.IDLE;
+
+    // Timing (in frames at ~60 FPS)
+    private int idleTimer = 0;
     private int chaseTimer = 0;
-    private int cooldownTimer = 0;
-    private final double TRIGGER_RANGE = 200.0; // Distance before it spots the player
+    private int waitTimer = 0;
+
+    private static final int IDLE_DURATION = 900;    // 15 seconds
+    private static final int CHASE_DURATION = 300;    // 5 seconds
+    private static final int WAIT_DURATION = 180;     // 3 seconds
+
+    private double spawnX, spawnY;
 
     public Monster(double x, double y) {
         super(x, y, 25.0);
+        this.spawnX = x;
+        this.spawnY = y;
+        this.idleTimer = IDLE_DURATION;
     }
 
-    // Updated signature to accept lollisCollected
-    public void update(double playerX, double playerY, boolean playerIsHidden, int lollisCollected, Maze maze) {
-        this.currentLollis = lollisCollected;
+    public void update(double playerX, double playerY, boolean playerInEscapeRoom, Maze maze) {
         pulsePhase += 0.1;
 
-        if (lollisCollected == 0) return;
+        switch (state) {
+            case IDLE:
+                idleTimer--;
+                if (idleTimer <= 0) {
+                    state = State.CHASING;
+                    chaseTimer = CHASE_DURATION;
+                    speed = 2.0;
+                }
+                break;
 
-        if (cooldownTimer > 0) {
-            cooldownTimer--;
-            return;
-        }
-
-        double dx = playerX - this.x;
-        double dy = playerY - this.y;
-        double distance = Math.sqrt(dx * dx + dy * dy);
-
-        if (playerIsHidden) {
-            isChasing = false;
-            return;
-        }
-
-        // TRIGGER LOGIC: Must be in range AND have a clear Line of Sight
-        if (!isChasing && distance < TRIGGER_RANGE) {
-            // Check if the monster can actually see the player down the hall
-            boolean canSeePlayer = maze.hasLineOfSight(this.x + size/2, this.y + size/2, playerX + 10, playerY + 10);
-
-            if (canSeePlayer) {
-                isChasing = true;
-                if (lollisCollected == 1) chaseTimer = 180;      // 3 seconds
-                else if (lollisCollected == 2) chaseTimer = 300; // 5 seconds
-                else chaseTimer = 420;                           // 7 seconds
-            }
-        }
-
-        // CHASE LOGIC: Once triggered, it relentlessly uses BFS to hunt you down
-        // Notice we don't check distance or Line of Sight here. It just chases!
-        if (isChasing) {
-            int currentC = (int) ((this.x + size/2) / Maze.TILE_SIZE);
-            int currentR = (int) ((this.y + size/2) / Maze.TILE_SIZE);
-            int playerC = (int) ((playerX + 10) / Maze.TILE_SIZE);
-            int playerR = (int) ((playerY + 10) / Maze.TILE_SIZE);
-
-            int[] nextTile = maze.getNextMove(currentR, currentC, playerR, playerC);
-
-            if (nextTile != null) {
-                double targetX, targetY;
-
-                if (nextTile[0] == playerR && nextTile[1] == playerC) {
-                    targetX = playerX - (size/2) + 10; // Aim for player center
-                    targetY = playerY - (size/2) + 10;
-                } else {
-                    targetX = nextTile[1] * Maze.TILE_SIZE + (Maze.TILE_SIZE - size) / 2;
-                    targetY = nextTile[0] * Maze.TILE_SIZE + (Maze.TILE_SIZE - size) / 2;
+            case CHASING:
+                if (playerInEscapeRoom) {
+                    // Player reached escape room — switch to waiting at door
+                    state = State.WAITING_AT_DOOR;
+                    waitTimer = WAIT_DURATION;
+                    break;
                 }
 
-                double stepDX = targetX - this.x;
-                double stepDY = targetY - this.y;
-                double stepDist = Math.sqrt(stepDX * stepDX + stepDY * stepDY);
+                // BFS pathfinding chase
+                chasePlayer(playerX, playerY, maze);
 
-                if (stepDist > 0) {
-                    double moveDist = Math.min(speed, stepDist);
-                    this.x += (stepDX / stepDist) * moveDist;
-                    this.y += (stepDY / stepDist) * moveDist;
+                chaseTimer--;
+                if (chaseTimer <= 0) {
+                    // Chase ended, return to idle
+                    returnToSpawn();
+                    state = State.IDLE;
+                    idleTimer = IDLE_DURATION;
                 }
+                break;
+
+            case WAITING_AT_DOOR:
+                waitTimer--;
+                if (waitTimer <= 0) {
+                    // Done waiting, go back to idle
+                    returnToSpawn();
+                    state = State.IDLE;
+                    idleTimer = IDLE_DURATION;
+                }
+                break;
+        }
+    }
+
+    private void chasePlayer(double playerX, double playerY, Maze maze) {
+        int currentC = (int) ((this.x + size / 2) / Maze.TILE_SIZE);
+        int currentR = (int) ((this.y + size / 2 - Maze.Y_OFFSET) / Maze.TILE_SIZE);
+        int playerC = (int) ((playerX + 10) / Maze.TILE_SIZE);
+        int playerR = (int) ((playerY + 10 - Maze.Y_OFFSET) / Maze.TILE_SIZE);
+
+        int[] nextTile = maze.getNextMove(currentR, currentC, playerR, playerC);
+
+        if (nextTile != null) {
+            double targetX, targetY;
+
+            if (nextTile[0] == playerR && nextTile[1] == playerC) {
+                targetX = playerX - (size / 2) + 10;
+                targetY = playerY - (size / 2) + 10;
+            } else {
+                targetX = nextTile[1] * Maze.TILE_SIZE + (Maze.TILE_SIZE - size) / 2;
+                targetY = nextTile[0] * Maze.TILE_SIZE + Maze.Y_OFFSET + (Maze.TILE_SIZE - size) / 2;
             }
 
-            chaseTimer--; // Tick down the clock
+            double stepDX = targetX - this.x;
+            double stepDY = targetY - this.y;
+            double stepDist = Math.sqrt(stepDX * stepDX + stepDY * stepDY);
 
-            // Only stop if the timer runs out
-            if (chaseTimer <= 0) {
-                isChasing = false;
-                cooldownTimer = 180; // Rest for 3 seconds
+            if (stepDist > 0) {
+                double moveDist = Math.min(speed, stepDist);
+                this.x += (stepDX / stepDist) * moveDist;
+                this.y += (stepDY / stepDist) * moveDist;
             }
         }
+    }
+
+    private void returnToSpawn() {
+        // Current position becomes the new origin
+        this.spawnX = this.x;
+        this.spawnY = this.y;
     }
 
     @Override
@@ -102,48 +120,151 @@ public class Monster extends Entity implements Collidable {
 
     @Override
     public void render(GraphicsContext gc) {
-        // If 2 or more lollis have been collected, draw the violent red aura
-        if (currentLollis >= 2) {
-            double pulseOffset = Math.sin(pulsePhase) * 4; // Massive, aggressive pulse
-            gc.setFill(Color.rgb(139, 0, 0, 0.5)); // Semi-transparent blood red
-            gc.fillOval(x - pulseOffset, y - pulseOffset, size + (pulseOffset * 2), size + (pulseOffset * 2));
+        double cx = x + size / 2;
+        double cy = y + size / 2;
+
+        if (state != State.IDLE) {
+            // Dark red aura when active
+            double pulseOffset = Math.sin(pulsePhase) * 5;
+            gc.setFill(Color.rgb(100, 0, 0, 0.35));
+            gc.fillOval(x - pulseOffset - 2, y - pulseOffset - 2, size + (pulseOffset + 2) * 2, size + (pulseOffset + 2) * 2);
         }
 
-        // Draw the pitch-black core on top of the aura
-        gc.setFill(Color.BLACK);
-        gc.fillOval(x + 2, y + 2, size - 4, size - 4);
+        // --- Pale face (head) ---
+        double headW = size - 4;
+        double headH = size - 2;
+        double headX = x + 2;
+        double headY = y + 1;
+
+        // Pale skin
+        Color skinColor = (state == State.IDLE) ? Color.rgb(220, 210, 200, 0.5) : Color.rgb(240, 230, 220);
+        gc.setFill(skinColor);
+        gc.fillOval(headX, headY, headW, headH);
+
+        // --- Yellow hair ---
+        Color hairColor = (state == State.IDLE) ? Color.rgb(180, 160, 40, 0.5) : Color.rgb(220, 200, 60);
+        gc.setFill(hairColor);
+        // Hair top
+        gc.fillArc(headX - 1, headY - 3, headW + 2, headH * 0.6, 0, 180, javafx.scene.shape.ArcType.ROUND);
+        // Hair sides (left strand)
+        gc.fillOval(headX - 2, headY + 2, 5, headH - 4);
+        // Hair sides (right strand)
+        gc.fillOval(headX + headW - 3, headY + 2, 5, headH - 4);
+
+        // --- Mouth ---
+        if (state == State.CHASING) {
+            // Wide creepy grin
+            gc.setStroke(Color.rgb(80, 0, 0));
+            gc.setLineWidth(1.5);
+            gc.strokeArc(headX + 4, headY + headH * 0.55, headW - 8, 6, 180, 180, javafx.scene.shape.ArcType.OPEN);
+            // Teeth hints
+            gc.setStroke(Color.WHITE);
+            gc.setLineWidth(0.5);
+            double mouthY = headY + headH * 0.55 + 3;
+            for (int i = 0; i < 4; i++) {
+                double tx = headX + 6 + i * 3;
+                gc.strokeLine(tx, mouthY - 1, tx, mouthY + 1);
+            }
+        } else if (state == State.WAITING_AT_DOOR) {
+            // Thin sinister smile
+            gc.setStroke(Color.rgb(100, 0, 0));
+            gc.setLineWidth(1);
+            gc.strokeArc(headX + 5, headY + headH * 0.58, headW - 10, 4, 180, 180, javafx.scene.shape.ArcType.OPEN);
+        } else {
+            // Faint closed mouth
+            gc.setStroke(Color.rgb(150, 120, 120, 0.4));
+            gc.setLineWidth(0.8);
+            gc.strokeLine(headX + 7, headY + headH * 0.65, headX + headW - 7, headY + headH * 0.65);
+        }
     }
 
     public void renderEyes(GraphicsContext gc) {
-        if (currentLollis == 0) {
-            // PHASE 1: IDLE - Dim, small, static eyes. They are sleeping/dormant.
-            gc.setFill(Color.rgb(120, 0, 0)); // Very dark red
-            gc.fillOval(x + 7, y + 9, 2, 2);
-            gc.fillOval(x + 16, y + 9, 2, 2);
+        double headX = x + 2;
+        double headY = y + 1;
+        double headW = size - 4;
+        double headH = size - 2;
 
-        } else if (!isChasing) {
-            // PHASE 2: SEARCHING - Brighter, wider, standard pulse.
-            gc.setFill(Color.RED);
-            double pulseOffset = Math.sin(pulsePhase) * 1.5;
-            double currentEyeSize = 4 + pulseOffset;
+        double eyeY = headY + headH * 0.35;
+        double leftEyeX = headX + headW * 0.22;
+        double rightEyeX = headX + headW * 0.58;
 
-            gc.fillOval((x + 6) - (pulseOffset / 2), (y + 8) - (pulseOffset / 2), currentEyeSize, currentEyeSize);
-            gc.fillOval((x + 15) - (pulseOffset / 2), (y + 8) - (pulseOffset / 2), currentEyeSize, currentEyeSize);
+        if (state == State.IDLE) {
+            // Dim, half-closed red eyes
+            gc.setFill(Color.rgb(150, 0, 0, 0.5));
+            gc.fillOval(leftEyeX, eyeY + 1, 4, 2);
+            gc.fillOval(rightEyeX, eyeY + 1, 4, 2);
+        } else if (state == State.WAITING_AT_DOOR) {
+            // Glowing red eyes, slow pulse
+            double pulse = Math.sin(pulsePhase * 0.8) * 0.5;
+            double eyeSize = 4 + pulse;
 
+            // Eye whites
+            gc.setFill(Color.rgb(40, 0, 0));
+            gc.fillOval(leftEyeX - 1, eyeY - 1, eyeSize + 2, eyeSize + 1);
+            gc.fillOval(rightEyeX - 1, eyeY - 1, eyeSize + 2, eyeSize + 1);
+
+            // Red iris
+            gc.setFill(Color.rgb(220, 0, 0));
+            gc.fillOval(leftEyeX, eyeY, eyeSize, eyeSize - 1);
+            gc.fillOval(rightEyeX, eyeY, eyeSize, eyeSize - 1);
+
+            // Bright pupil center
+            gc.setFill(Color.rgb(255, 100, 100));
+            gc.fillOval(leftEyeX + 1, eyeY + 0.5, 2, 1.5);
+            gc.fillOval(rightEyeX + 1, eyeY + 0.5, 2, 1.5);
         } else {
-            // PHASE 3: CHASING - Aggressive, fast-pulsing, massive eyes.
-            gc.setFill(Color.rgb(255, 50, 50)); // Bright, angry red
-            double fastPulse = Math.sin(pulsePhase * 2.5) * 2; // Pulses much faster
-            double currentEyeSize = 5 + fastPulse;
+            // CHASING — Intense, fast-pulsing, glowing red eyes
+            double fastPulse = Math.sin(pulsePhase * 3) * 1.5;
+            double eyeSize = 5 + fastPulse;
 
-            // Draw larger, slightly distorted eyes to simulate violent movement
-            gc.fillOval((x + 5) - (fastPulse / 2), (y + 7) - (fastPulse / 2), currentEyeSize, currentEyeSize - 1);
-            gc.fillOval((x + 14) - (fastPulse / 2), (y + 7) - (fastPulse / 2), currentEyeSize, currentEyeSize - 1);
+            // Outer glow
+            gc.setFill(Color.rgb(255, 0, 0, 0.3));
+            gc.fillOval(leftEyeX - 3, eyeY - 3, eyeSize + 6, eyeSize + 5);
+            gc.fillOval(rightEyeX - 3, eyeY - 3, eyeSize + 6, eyeSize + 5);
+
+            // Eye whites (dark)
+            gc.setFill(Color.rgb(50, 0, 0));
+            gc.fillOval(leftEyeX - 1, eyeY - 1, eyeSize + 2, eyeSize);
+            gc.fillOval(rightEyeX - 1, eyeY - 1, eyeSize + 2, eyeSize);
+
+            // Bright red iris
+            gc.setFill(Color.rgb(255, 20, 20));
+            gc.fillOval(leftEyeX, eyeY, eyeSize, eyeSize - 1);
+            gc.fillOval(rightEyeX, eyeY, eyeSize, eyeSize - 1);
+
+            // Hot white center
+            gc.setFill(Color.rgb(255, 200, 200));
+            gc.fillOval(leftEyeX + 1.5, eyeY + 1, 2, 1.5);
+            gc.fillOval(rightEyeX + 1.5, eyeY + 1, 2, 1.5);
         }
     }
 
     public boolean isChasing() {
-        return isChasing;
+        return state == State.CHASING;
+    }
+
+    public boolean isWaitingAtDoor() {
+        return state == State.WAITING_AT_DOOR;
+    }
+
+    public boolean isDangerous() {
+        return state == State.CHASING || state == State.WAITING_AT_DOOR;
+    }
+
+    public State getState() {
+        return state;
+    }
+
+    public int getChaseTimer() {
+        return chaseTimer;
+    }
+
+    public int getIdleTimer() {
+        return idleTimer;
+    }
+
+    public int getWaitTimer() {
+        return waitTimer;
     }
 
     @Override

@@ -5,13 +5,12 @@ import com.nsu.cse215l.redlolli.redlolli.map.Maze;
 import javafx.geometry.Rectangle2D;
 import javafx.scene.canvas.GraphicsContext;
 import javafx.scene.paint.Color;
+import javafx.scene.shape.ArcType;
 
 public class Player extends Entity implements Collidable {
     private double speed = 3.0;
-    private double sanity = 100.0;
-    private final double MAX_SANITY = 100.0;
-    private final double SANITY_DRAIN_RATE = 0.05; // Adjust this to make the game harder/easier
     private boolean isBeingChased = false;
+    private boolean isInEscapeRoom = false;
 
     public Player(double x, double y) {
         super(x, y, 20.0);
@@ -23,35 +22,81 @@ public class Player extends Entity implements Collidable {
 
     @Override
     public void render(GraphicsContext gc) {
-        // Outline & Core
-        gc.setStroke(Color.DARKRED);
-        gc.setLineWidth(3);
+        // Soft glow aura
+        if (isInEscapeRoom) {
+            gc.setFill(Color.rgb(0, 180, 0, 0.15));
+        } else if (isBeingChased) {
+            gc.setFill(Color.rgb(255, 0, 0, 0.12));
+        } else {
+            gc.setFill(Color.rgb(200, 200, 255, 0.1));
+        }
+        gc.fillOval(x - 4, y - 4, size + 8, size + 8);
+
+        // Body outline
+        gc.setStroke(isBeingChased ? Color.RED : Color.rgb(100, 80, 120));
+        gc.setLineWidth(2);
         gc.strokeOval(x, y, size, size);
 
-        gc.setFill(Color.WHITE);
+        // Body fill — slight gradient effect via layering
+        gc.setFill(Color.rgb(240, 235, 230));
         gc.fillOval(x, y, size, size);
+        gc.setFill(Color.rgb(255, 250, 245));
+        gc.fillOval(x + 2, y + 1, size - 4, size - 3);
+
+        // Rosy cheeks
+        gc.setFill(Color.rgb(255, 150, 150, 0.35));
+        gc.fillOval(x + 1, y + 10, 5, 3);
+        gc.fillOval(x + 14, y + 10, 5, 3);
 
         if (!isBeingChased) {
-            // PHASE 1: CALM & CUTE - Tall oval eyes with a tiny white gleam
-            gc.setFill(Color.rgb(20, 20, 20)); // Pitch black eyes
-            gc.fillOval(x + 5, y + 5, 4, 6);  // Left eye (taller)
-            gc.fillOval(x + 11, y + 5, 4, 6); // Right eye
+            // -- CALM: Cute round eyes with iris detail --
+            // Eye whites
+            gc.setFill(Color.WHITE);
+            gc.fillOval(x + 4, y + 4, 5, 7);
+            gc.fillOval(x + 11, y + 4, 5, 7);
 
-            gc.setFill(Color.WHITE); // The cute catchlight / gleam
-            gc.fillOval(x + 6, y + 6, 1.5, 1.5);
-            gc.fillOval(x + 12, y + 6, 1.5, 1.5);
+            // Iris (dark blue-ish)
+            gc.setFill(Color.rgb(30, 30, 60));
+            gc.fillOval(x + 5, y + 5, 3.5, 5);
+            gc.fillOval(x + 12, y + 5, 3.5, 5);
+
+            // Pupil
+            gc.setFill(Color.BLACK);
+            gc.fillOval(x + 5.5, y + 6, 2, 3);
+            gc.fillOval(x + 12.5, y + 6, 2, 3);
+
+            // Catchlight sparkle
+            gc.setFill(Color.WHITE);
+            gc.fillOval(x + 5.5, y + 5.5, 1.5, 1.5);
+            gc.fillOval(x + 12.5, y + 5.5, 1.5, 1.5);
+
+            // Little smile
+            gc.setStroke(Color.rgb(120, 80, 80));
+            gc.setLineWidth(1);
+            gc.strokeArc(x + 6, y + 12, 8, 4, 180, 180, javafx.scene.shape.ArcType.OPEN);
         } else {
-            // PHASE 2: PANIC - The cute eyes widen and violently tremble!
-            double trembleX = (Math.random() * 1.5) - 0.75;
-            double trembleY = (Math.random() * 1.5) - 0.75;
+            // -- PANIC: Wide trembling eyes --
+            double trembleX = (Math.random() * 2) - 1;
+            double trembleY = (Math.random() * 2) - 1;
 
-            gc.setFill(Color.rgb(20, 20, 20));
-            gc.fillOval(x + 4 + trembleX, y + 4 + trembleY, 5, 7);
-            gc.fillOval(x + 11 + trembleX, y + 4 + trembleY, 5, 7);
+            // Wide eye whites
+            gc.setFill(Color.WHITE);
+            gc.fillOval(x + 3 + trembleX, y + 3 + trembleY, 6, 8);
+            gc.fillOval(x + 11 + trembleX, y + 3 + trembleY, 6, 8);
 
-            gc.setFill(Color.WHITE); // Trembling gleam
-            gc.fillOval(x + 5.5 + trembleX, y + 5 + trembleY, 2, 2);
-            gc.fillOval(x + 12.5 + trembleX, y + 5 + trembleY, 2, 2);
+            // Shrunken pupils (fear)
+            gc.setFill(Color.BLACK);
+            gc.fillOval(x + 5 + trembleX, y + 6 + trembleY, 2.5, 2.5);
+            gc.fillOval(x + 13 + trembleX, y + 6 + trembleY, 2.5, 2.5);
+
+            // Fear sparkle
+            gc.setFill(Color.rgb(255, 255, 255, 0.8));
+            gc.fillOval(x + 5 + trembleX, y + 5.5 + trembleY, 1, 1);
+            gc.fillOval(x + 13 + trembleX, y + 5.5 + trembleY, 1, 1);
+
+            // Open mouth (shock)
+            gc.setFill(Color.rgb(60, 30, 30));
+            gc.fillOval(x + 7.5, y + 13, 5, 4);
         }
     }
 
@@ -60,43 +105,30 @@ public class Player extends Entity implements Collidable {
         return new Rectangle2D(x, y, size, size);
     }
 
-    // Updated move method with collision detection
     public void move(double dx, double dy, Maze maze) {
-        // Calculate where the player is trying to go
         double nextX = this.x + (dx * speed);
         double nextY = this.y + (dy * speed);
-
-        // Create a temporary hitbox for the future position
         Rectangle2D nextHitbox = new Rectangle2D(nextX, nextY, size, size);
 
-        // Only update actual coordinates if the path is clear
         if (!maze.isWallCollision(nextHitbox)) {
             this.x = nextX;
             this.y = nextY;
         }
     }
 
-    public void dropSanity(double amount) {
-        this.sanity -= amount;
-        if (this.sanity < 0) {
-            this.sanity = 0;
-        }
-    }
-
-    // Getters and Setters for Sanity
-    public double getSanity() {
-        return sanity;
-    }public double getSize() {
+    public double getSize() {
         return size;
     }
+
     public void setBeingChased(boolean chased) {
         this.isBeingChased = chased;
     }
 
-    public void restoreSanity(double amount) {
-        this.sanity += amount;
-        if (this.sanity > MAX_SANITY) {
-            this.sanity = MAX_SANITY;
-        }
+    public boolean isInEscapeRoom() {
+        return isInEscapeRoom;
+    }
+
+    public void setInEscapeRoom(boolean inEscapeRoom) {
+        this.isInEscapeRoom = inEscapeRoom;
     }
 }

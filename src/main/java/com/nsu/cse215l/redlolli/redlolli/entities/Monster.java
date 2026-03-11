@@ -41,14 +41,11 @@ public class Monster extends Entity implements Collidable {
     // ========================= INTERNAL STATE =========================
 
     private double pulsePhase = 0.0;
-    private double spawnX, spawnY;
 
     // ========================= CONSTRUCTOR =========================
 
     public Monster(double x, double y) {
         super(x, y, 25.0);
-        this.spawnX = x;
-        this.spawnY = y;
         this.idleTimer = IDLE_DURATION;
     }
 
@@ -98,10 +95,8 @@ public class Monster extends Entity implements Collidable {
         }
     }
 
-    /** Transitions back to IDLE, keeping current position as new origin. */
+    /** Transitions back to IDLE, staying at current position. */
     private void returnToIdle() {
-        this.spawnX = this.x;
-        this.spawnY = this.y;
         state = State.IDLE;
         idleTimer = IDLE_DURATION;
     }
@@ -299,7 +294,6 @@ public class Monster extends Entity implements Collidable {
     public State getState()      { return state; }
     public boolean isChasing()       { return state == State.CHASING; }
     public boolean isWaitingAtDoor() { return state == State.WAITING_AT_DOOR; }
-    public boolean isDangerous()     { return state == State.CHASING || state == State.WAITING_AT_DOOR; }
 
     // ========================= TIMER GETTERS =========================
 

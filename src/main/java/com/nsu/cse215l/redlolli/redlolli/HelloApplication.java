@@ -51,9 +51,6 @@ public class HelloApplication extends Application {
     /** Item names discovered at each level. */
     private static final String[] ITEM_NAMES = {"Mud", "Shovel", "Rope"};
 
-    /** Number of chests per level. */
-    private static final int[] CHESTS_PER_LEVEL = {3, 4, 5};
-
     /** Main headline text shown when a lolli is found on each level. */
     private static final String[] ITEM_FOUND_MAIN_TEXT = {"Mud Found", "Shovel Found", "Rope Found"};
 
@@ -82,7 +79,6 @@ public class HelloApplication extends Application {
 
     private int currentLevel = 1;
     private boolean showingItemFound = false;
-    private boolean levelFoundLolli = false;
 
     // ========================= VISUAL EFFECTS STATE =========================
 
@@ -191,7 +187,6 @@ public class HelloApplication extends Application {
         paleLuna = null;
         isPlaying = true;
         showingItemFound = false;
-        levelFoundLolli = false;
         warningFlashTimer = 0;
         pulsePhaseHUD = 0;
         lolliRevealState = null;
@@ -302,7 +297,6 @@ public class HelloApplication extends Application {
             if (!chest.isCollected() && player.getHitbox().intersects(chest.getHitbox())) {
                 chest.collect();
                 if (chest.hasLolli()) {
-                    levelFoundLolli = true;
                     lolliRevealState = new GameRenderer.LolliRevealState(
                             chest.getX(), chest.getY(), LOLLI_REVEAL_DURATION);
                     return;

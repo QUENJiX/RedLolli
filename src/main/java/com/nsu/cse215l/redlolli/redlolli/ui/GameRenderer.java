@@ -1,6 +1,7 @@
 package com.nsu.cse215l.redlolli.redlolli.ui;
 
 import com.nsu.cse215l.redlolli.redlolli.entities.Entity;
+import com.nsu.cse215l.redlolli.redlolli.entities.Item;
 import com.nsu.cse215l.redlolli.redlolli.entities.Monster;
 import com.nsu.cse215l.redlolli.redlolli.entities.Player;
 import com.nsu.cse215l.redlolli.redlolli.map.Maze;
@@ -44,7 +45,7 @@ public class GameRenderer {
     public static double render(GraphicsContext gc, Maze maze, List<Entity> entities,
                                  Monster paleLuna, Player player, int warningFlashTimer,
                                  LolliRevealState revealState, int level,
-                                 List<com.nsu.cse215l.redlolli.redlolli.entities.Item> chests,
+                                 List<Item> chests,
                                  String[] itemNames, double pulsePhase) {
         // Clear screen
         gc.setFill(Color.BLACK);

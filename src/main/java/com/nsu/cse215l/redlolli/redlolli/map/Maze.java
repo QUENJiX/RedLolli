@@ -79,10 +79,7 @@ public class Maze {
             }
             br.close();
 
-            mapGrid = new int[rowList.size()][];
-            for (int i = 0; i < rowList.size(); i++) {
-                mapGrid[i] = rowList.get(i);
-            }
+            mapGrid = rowList.toArray(new int[0][]);
 
             // Find and consume player spawn tile (7)
             for (int r = 0; r < mapGrid.length; r++) {

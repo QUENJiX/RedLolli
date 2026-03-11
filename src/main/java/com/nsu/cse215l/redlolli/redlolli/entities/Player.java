@@ -154,8 +154,6 @@ public class Player extends Entity implements Collidable {
 
     // ========================= GETTERS & SETTERS =========================
 
-    public double getSize() { return size; }
-
     public void setBeingChased(boolean chased) { this.isBeingChased = chased; }
 
     public boolean isInEscapeRoom() { return isInEscapeRoom; }

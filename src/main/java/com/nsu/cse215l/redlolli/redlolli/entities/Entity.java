@@ -2,9 +2,18 @@ package com.nsu.cse215l.redlolli.redlolli.entities;
 
 import javafx.scene.canvas.GraphicsContext;
 
+/**
+ * Abstract base class for all game entities (Player, Monster, Item).
+ * Provides position, size, and enforces update/render contract.
+ */
 public abstract class Entity {
+
+    // ========================= FIELDS =========================
+
     protected double x, y;
     protected double size;
+
+    // ========================= CONSTRUCTOR =========================
 
     public Entity(double x, double y, double size) {
         this.x = x;
@@ -12,11 +21,16 @@ public abstract class Entity {
         this.size = size;
     }
 
-    // Abstract methods: Every entity MUST have these but implements them differently
+    // ========================= ABSTRACT METHODS =========================
+
+    /** Called each frame to update entity logic. */
     public abstract void update();
+
+    /** Called each frame to render the entity on screen. */
     public abstract void render(GraphicsContext gc);
 
-    // Getters and Setters (Encapsulation)
+    // ========================= GETTERS =========================
+
     public double getX() { return x; }
     public double getY() { return y; }
 }

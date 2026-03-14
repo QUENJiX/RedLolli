@@ -294,16 +294,22 @@ public class Maze {
     public boolean hasLineOfSight(double x1, double y1, double x2, double y2) {
         if (mapGrid == null) return false;
 
-        double distance = Math.hypot(x2 - x1, y2 - y1);
-        int steps = (int) (distance / (TILE_SIZE / 2));
+        // OPTIMIZATION: Use Chebyshev distance instead of Math.hypot (removes square root)
+        double distX = Math.abs(x2 - x1);
+        double distY = Math.abs(y2 - y1);
+        double maxDist = Math.max(distX, distY);
+
+        // FIX: Force floating point division using 2.0. Use Math.ceil to ensure enough steps.
+        int steps = (int) Math.ceil(maxDist / (TILE_SIZE / 2.0));
 
         for (int i = 0; i <= steps; i++) {
-            double t = steps == 0 ? 0 : (double) i / steps;
+            double t = (steps == 0) ? 0 : (double) i / steps;
             double cx = x1 + t * (x2 - x1);
             double cy = y1 + t * (y2 - y1);
 
-            int col = (int) (cx / TILE_SIZE);
-            int row = (int) ((cy - Y_OFFSET) / TILE_SIZE);
+            // FIX: Use Math.floor to properly handle negative coordinates/offsets
+            int col = (int) Math.floor(cx / TILE_SIZE);
+            int row = (int) Math.floor((cy - Y_OFFSET) / TILE_SIZE);
 
             if (row >= 0 && row < mapGrid.length && col >= 0 && col < mapGrid[0].length) {
                 if (mapGrid[row][col] == 1) return false;

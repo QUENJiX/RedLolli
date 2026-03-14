@@ -14,7 +14,7 @@ import javafx.scene.shape.ArcType;
  *   <li>CHASING: BFS pathfinding pursuit for 5 seconds, instant kill on contact</li>
  *   <li>WAITING_AT_DOOR: lurking outside escape room for 3 seconds</li>
  * </ul>
- * After each cycle, Pale Luna stays at her current position (does not reset to spawn).
+ * After each cycle, Pale Luna stays at her current position.
  */
 public class Monster extends Entity implements Collidable {
 
@@ -27,7 +27,7 @@ public class Monster extends Entity implements Collidable {
 
     // ========================= CONSTANTS =========================
 
-    private static final double SPEED = 2.0;
+    private static final double SPEED = 3.0;
     private static final int IDLE_DURATION  = 900;  // 15 seconds at 60 FPS
     private static final int CHASE_DURATION = 300;  // 5 seconds
     private static final int WAIT_DURATION  = 180;  // 3 seconds

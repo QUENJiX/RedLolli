@@ -16,7 +16,7 @@ public class Player extends Entity implements Collidable {
 
     // ========================= CONSTANTS =========================
 
-    private static final double SPEED = 3.0;
+    private static final double SPEED = 2.0;
 
     // ========================= STATE FIELDS =========================
 
